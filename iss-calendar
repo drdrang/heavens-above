@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+
+import mechanize
+from time import strftime
+from BeautifulSoup import BeautifulSoup
+from datetime import datetime, date, timedelta
+from time import strptime
+from getopt import getopt
+import os, sys, envoy
+
+usage = '''usage: iss-calendar [-dh]
+
+options: -p : print ISS info but don't add to calendar
+         -h : help; print this message and quit
+'''
+
+# Personalization.
+maxMag = -2         # show passes at least this bright
+minAlt = 30         # show passes at least this high
+whichCal = 'home'   # add events to this calendar
+
+# Get Heavens Above login credentials.
+dotfile = '.heavens-above'
+dotpath = os.environ['HOME'] + '/' + dotfile
+try:
+  ha = open(dotpath, 'r').readline().strip().split(':')
+  user = dict(zip(['name', 'password'], ha))
+except IOError:
+  print "Can't find file named %s in your home directory." % dotfile
+  sys.exit()
+
+# Add an event to my calendar with an alarm 15 minutes before.
+def makeiCalEvent(start, end, loc1, loc2, loc3, intensity):
+  asStart = start.strftime("%A %B %d, %Y %I:%M:%S %p")
+  asEnd = end.strftime("%A %B %d, %Y %I:%M:%S %p")
+  info = "mag %.1f, %s / %s / %s" % (intensity, loc1, loc2, loc3)
+  cmd = '''tell application "iCal"
+	tell calendar "%s"
+		set evt to make new event at end with properties { summary:"ISS pass", start date:date "%s", end date:date "%s", location:"%s"}
+		tell evt
+		  make new sound alarm at end with properties { trigger interval: -15, sound name: "Basso" }
+		end tell
+  end tell
+end tell''' % (whichCal, asStart, asEnd, info)
+
+  envoy.run('osascript', data=cmd)
+  
+
+# Parse a row of Heavens Above data and return the start date (datetime),
+# the intensity (integer), and the beginning, peak, and end sky positions
+# (strings).
+def parseRow(row):
+  cols = row.findAll('td')
+  dStr = cols[0].a.string
+  t1Str = ':'.join(cols[2].string.split(':')[0:2])
+  t3Str = ':'.join(cols[8].string.split(':')[0:2])
+  intensity = float(cols[1].string)
+  alt1 = cols[3].string.replace(u'°', '')
+  az1 = cols[4].string
+  alt2 = cols[6].string.replace(u'°', '')
+  az2 = cols[7].string
+  alt3 = cols[9].string.replace(u'°', '')
+  az3 = cols[10].string
+  loc1 = '%s-%s' % (az1, alt1)
+  loc2 = '%s-%s' % (az2, alt2)
+  loc3 = '%s-%s' % (az3, alt3)
+  startStr = '%s %s %s' % (dStr, date.today().year, t1Str)
+  start = datetime(*strptime(startStr, '%d %b %Y %H:%M')[0:7])
+  endStr = '%s %s %s' % (dStr, date.today().year, t3Str)
+  end = datetime(*strptime(endStr, '%d %b %Y %H:%M')[0:7])
+  return (start, end, intensity, loc1, loc2, loc3)
+
+
+# Parse command line options.
+optlist, args = getopt(sys.argv[1:], 'ph')
+for o, a in optlist:
+  if o == '-p':
+    justPrint = True
+  else:
+    print usage
+    sys.exit()
+
+# This will be run weekly. The ISS information is given for a 10-day window.
+# To avoid duplicating events, we'll filter out events more than 7 days
+# in the future.
+nextWeek = date.today() + timedelta(days=7)
+
+# Heavens Above URLs and login information.
+loginURL = 'http://heavens-above.com/logon.asp'
+issURL = 'http://www.heavens-above.com/PassSummary.aspx?satid=25544&Session='
+
+# Create virtual browser and login.
+br = mechanize.Browser()
+br.set_handle_robots(False)
+br.open(loginURL)
+br.select_form(nr=0)    # the login form is the first on the page
+br['UserName'] = user['name']
+br['Password'] = user['password']
+resp = br.submit()
+
+# Get session ID from the end of the response URL.
+sid = resp.geturl().split('=')[1]
+
+# Get the 10-day ISS page.
+iHtml = br.open(issURL + sid).read()
+
+
+# In the past, Beautiful Soup hasn't been able to parse the Heavens Above HTML.
+# To get around this problem, we extract just the table of ISS data and set
+# it in a well-formed HTML skeleton.
+table = iHtml.split(r'<table id="ctl00_ContentPlaceHolder1_tblPasses"', 1)[1]
+table = table.split(r'>', 1)[1]
+table = table.split(r'</table>', 1)[0]
+
+html = '''<html>
+<head>
+</head>
+<body>
+<table>
+%s
+</table>
+</body>
+</html>''' % table
+
+# Parse the HTML.
+soup = BeautifulSoup(html)
+
+# Collect only the data rows of the table.
+rows = soup.findAll('table')[0].findAll('tr')[2:]
+
+# Go through the data rows, adding only bright, high events within
+# the next week to my "home" calendar.
+for row in rows:
+  (start, end, intensity, loc1, loc2, loc3) = parseRow(row)
+  if intensity <= maxMag and int(loc2.split('-')[1]) >= minAlt\
+      and start.date() < nextWeek:
+    if justPrint:
+      print '%s, %.1f, %s / %s / %s' %\
+        (start.strftime('%b %d %H:%M'), intensity, loc1, loc2, loc3)
+    else:
+      makeiCalEvent(start, end, loc1, loc2, loc3, intensity)

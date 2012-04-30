@@ -1,0 +1,140 @@
+#!/usr/bin/env python
+
+import mechanize
+from time import strftime
+from BeautifulSoup import BeautifulSoup
+from datetime import datetime, date, timedelta
+from time import strptime
+from getopt import getopt
+import os, sys, envoy
+
+usage = '''usage: iridium-calendar [-dh]
+
+options: -p : print flare info but don't add to calendar
+         -h : help; print this message and quit
+'''
+
+# Personalization
+maxMag = -3       # show flares at least this bright
+earliest = 12     # show flares after this hour of day
+
+# Get Heavens Above login credentials.
+dotfile = '.heavens-above'
+dotpath = os.environ['HOME'] + '/' + dotfile
+try:
+  ha = open(dotpath, 'r').readline().strip().split(':')
+  user = dict(zip(['name', 'password'], ha))
+except IOError:
+  print "Can't find file named %s in your home directory." % dotfile
+  sys.exit()
+
+# Add an event to my calendar with an alarm 15 minutes before.
+def makeiCalEvent(start, end, loc1, loc2, loc3, intensity):
+  asStart = start.strftime("%A %B %d, %Y %I:%M:%S %p")
+  asEnd = end.strftime("%A %B %d, %Y %I:%M:%S %p")
+  info = "mag %.1f, %s / %s / %s" % (intensity, loc1, loc2, loc3)
+  cmd = '''tell application "iCal"
+	tell calendar "%s"
+		set evt to make new event at end with properties { summary:"ISS pass", start date:date "%s", end date:date "%s", location:"%s"}
+		tell evt
+		  make new sound alarm at end with properties { trigger interval: -15, sound name: "Basso" }
+		end tell
+  end tell
+end tell''' % (whichCal, asStart, asEnd, info)
+
+  envoy.run('osascript', data=cmd)
+
+# Add an event to my "home" calendar with an alarm 15 minutes before.
+def makeiCalEvent(start, loc, intensity):
+  end = start + timedelta(0, 60)
+  asStart = start.strftime("%A %B %d, %Y %I:%M:%S %p")
+  asEnd = end.strftime("%A %B %d, %Y %I:%M:%S %p") 
+  info = "mag %d, %s" % (intensity, loc)
+  cmd = '''tell application "iCal"
+  tell calendar "%s"
+    set evt to make new event at end with properties { summary:"Iridium flare", start date:date "%s", end date: date "%s", location:"%s" }
+    tell evt
+      make new sound alarm at end with properties {trigger interval: -15, sound name: "Basso" }
+    end tell
+  end tell
+end tell''' % (whichCal, asStart, asEnd, info)
+
+  envoy.run('osascript', data = cmd)
+
+# Parse a row of Heavens Above data and return the start date (datetime),
+# the intensity (integer), and the sky position (string).
+def parseRow(row):
+  cols = row.findAll('td')
+  dStr = cols[0].string
+  tStr = ':'.join(cols[1].a.string.split(':')[0:2])
+  intensity = int(cols[2].string)
+  alt = cols[3].string.replace('&#176;', '')
+  az = cols[4].string.replace('&#176;', '')
+  loc = 'alt %s, az %s' % (alt, az)
+  startStr = '%s %s %s' % (dStr, date.today().year, tStr)
+  start = datetime(*strptime(startStr, '%d %b %Y %H:%M')[0:7])
+  return (start, intensity, loc)
+
+
+# Parse command line options.
+optlist, args = getopt(sys.argv[1:], 'dh')
+for o, a in optlist:
+  if o == '-p':
+    justPrint = True
+  else:
+    print usage
+    sys.exit()
+
+# Heavens Above URLs and login information.
+lURL = 'http://heavens-above.com/logon.asp'                       # login
+iURL = 'http://heavens-above.com/iridium.asp?Dur=7&Session='      # iridium flares
+  
+# Create virtual browser and login.
+br = mechanize.Browser()
+br.set_handle_robots(False)
+br.open(lURL)
+br.select_form(nr=0)    # the login form is the first on the page
+br['UserName'] = user['name']
+br['Password'] = user['password']
+resp = br.submit()
+
+# Get session ID from the end of the response URL.
+sid = resp.geturl().split('=')[1]
+
+# Get the 7-day Iridium page.
+iHtml = br.open(iURL + sid).read()
+
+ 
+# For some reason, Beautiful Soup can't parse the HTML on the Iridium page.
+# To get around this problem, we extract just the table of flare data and set
+# it in a well-formed HTML skeleton.
+table = iHtml.split(r'<table BORDER CELLPADDING=5>')[1]
+table = table.split(r'</table>')[0]
+
+html = '''<html>
+<head>
+</head>
+<body>
+<table>
+%s
+</table>
+</body>
+</html>''' % table
+
+# Parse the HTML.
+soup = BeautifulSoup(html)
+
+# Collect only the data rows of the table.
+rows = soup.findAll('table')[0].findAll('tr')[1:]
+
+# Go through the data rows, adding only bright evening events to my "home" calendar.
+for row in rows:
+  (start, intensity, loc) = parseRow(row)
+  if intensity <= maxMag and start.hour > earliest:
+    if justPrint:
+      print '%s, %.1f, %s' %\
+        (start.strftime('%b %d %H:%M'), intensity, loc)
+    else:
+      makeiCalEvent(start, loc, intensity)
+      
+    
