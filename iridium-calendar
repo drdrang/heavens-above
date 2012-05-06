@@ -8,7 +8,7 @@ from time import strptime
 from getopt import getopt
 import os, sys, envoy
 
-usage = '''usage: iridium-calendar [-dh]
+usage = '''usage: iridium-calendar [-ph]
 
 options: -p : print flare info but don't add to calendar
          -h : help; print this message and quit
@@ -77,7 +77,7 @@ def parseRow(row):
 
 
 # Parse command line options.
-optlist, args = getopt(sys.argv[1:], 'dh')
+optlist, args = getopt(sys.argv[1:], 'ph')
 for o, a in optlist:
   if o == '-p':
     justPrint = True
@@ -107,9 +107,14 @@ iHtml = br.open(iURL + sid).read()
  
 # For some reason, Beautiful Soup can't parse the HTML on the Iridium page.
 # To get around this problem, we extract just the table of flare data and set
-# it in a well-formed HTML skeleton.
-table = iHtml.split(r'<table BORDER CELLPADDING=5>')[1]
-table = table.split(r'</table>')[0]
+# it in a well-formed HTML skeleton. If there is no table of flare data, create
+# an empty table.
+try:
+  table = iHtml.split(r'<table BORDER CELLPADDING=5>')[1]
+  table = table.split(r'</table>')[0]
+except IndexError:
+  table = '<tr><td></td></tr>'
+  
 
 html = '''<html>
 <head>

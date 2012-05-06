@@ -9,7 +9,7 @@ from time import strptime
 from getopt import getopt
 import os, sys, envoy
 
-usage = '''usage: iss-calendar [-dh]
+usage = '''usage: iss-calendar [-ph]
 
 options: -p : print ISS info but don't add to calendar
          -h : help; print this message and quit
@@ -108,10 +108,14 @@ iHtml = br.open(issURL + sid).read()
 
 # In the past, Beautiful Soup hasn't been able to parse the Heavens Above HTML.
 # To get around this problem, we extract just the table of ISS data and set
-# it in a well-formed HTML skeleton.
-table = iHtml.split(r'<table id="ctl00_ContentPlaceHolder1_tblPasses"', 1)[1]
-table = table.split(r'>', 1)[1]
-table = table.split(r'</table>', 1)[0]
+# it in a well-formed HTML skeleton. If there is no table of ISS data, create
+# an empty table.
+try:
+    table = iHtml.split(r'<table id="ctl00_ContentPlaceHolder1_tblPasses"', 1)[1]
+    table = table.split(r'>', 1)[1]
+    table = table.split(r'</table>', 1)[0]
+except IndexError:
+    table = '<tr><td></td></tr>'
 
 html = '''<html>
 <head>
