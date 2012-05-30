@@ -17,6 +17,7 @@ options: -p : print flare info but don't add to calendar
 # Personalization
 maxMag = -3       # show flares at least this bright
 earliest = 12     # show flares after this hour of day
+whichCal = 'home'   # add events to this calendar
 
 # Get Heavens Above login credentials.
 dotfile = '.heavens-above'
@@ -77,6 +78,7 @@ def parseRow(row):
 
 
 # Parse command line options.
+justPrint = False
 optlist, args = getopt(sys.argv[1:], 'ph')
 for o, a in optlist:
   if o == '-p':

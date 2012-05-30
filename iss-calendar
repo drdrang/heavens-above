@@ -18,6 +18,7 @@ options: -p : print ISS info but don't add to calendar
 # Personalization.
 maxMag = -2         # show passes at least this bright
 minAlt = 30         # show passes at least this high
+earliest = 12       # show passes after this hour of day
 whichCal = 'home'   # add events to this calendar
 
 # Get Heavens Above login credentials.
@@ -73,6 +74,7 @@ def parseRow(row):
 
 
 # Parse command line options.
+justPrint = False
 optlist, args = getopt(sys.argv[1:], 'ph')
 for o, a in optlist:
   if o == '-p':
@@ -138,7 +140,7 @@ rows = soup.findAll('table')[0].findAll('tr')[2:]
 for row in rows:
   (start, end, intensity, loc1, loc2, loc3) = parseRow(row)
   if intensity <= maxMag and int(loc2.split('-')[1]) >= minAlt\
-      and start.date() < nextWeek:
+      and start.date() < nextWeek and start.hour > earliest:
     if justPrint:
       print '%s, %.1f, %s / %s / %s' %\
         (start.strftime('%b %d %H:%M'), intensity, loc1, loc2, loc3)
