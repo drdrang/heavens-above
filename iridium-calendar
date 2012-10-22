@@ -29,27 +29,11 @@ except IOError:
   print "Can't find file named %s in your home directory." % dotfile
   sys.exit()
 
-# Add an event to my calendar with an alarm 15 minutes before.
-def makeiCalEvent(start, end, loc1, loc2, loc3, intensity):
-  asStart = start.strftime("%A %B %d, %Y %I:%M:%S %p")
-  asEnd = end.strftime("%A %B %d, %Y %I:%M:%S %p")
-  info = "mag %.1f, %s / %s / %s" % (intensity, loc1, loc2, loc3)
-  cmd = '''tell application "iCal"
-	tell calendar "%s"
-		set evt to make new event at end with properties { summary:"ISS pass", start date:date "%s", end date:date "%s", location:"%s"}
-		tell evt
-		  make new sound alarm at end with properties { trigger interval: -15, sound name: "Basso" }
-		end tell
-  end tell
-end tell''' % (whichCal, asStart, asEnd, info)
-
-  envoy.run('osascript', data=cmd)
-
 # Add an event to my "home" calendar with an alarm 15 minutes before.
 def makeiCalEvent(start, loc, intensity):
   end = start + timedelta(0, 60)
   asStart = start.strftime("%A %B %d, %Y %I:%M:%S %p")
-  asEnd = end.strftime("%A %B %d, %Y %I:%M:%S %p") 
+  asEnd = end.strftime("%A %B %d, %Y %I:%M:%S %p")
   info = "mag %d, %s" % (intensity, loc)
   cmd = '''tell application "iCal"
   tell calendar "%s"
@@ -66,14 +50,12 @@ end tell''' % (whichCal, asStart, asEnd, info)
 # the intensity (integer), and the sky position (string).
 def parseRow(row):
   cols = row.findAll('td')
-  dStr = cols[0].string
-  tStr = ':'.join(cols[1].a.string.split(':')[0:2])
-  intensity = int(cols[2].string)
-  alt = cols[3].string.replace('&#176;', '')
-  az = cols[4].string.replace('&#176;', '')
+  dtStr = cols[0].a.string
+  intensity = int(cols[1].string)
+  alt = cols[2].string.replace('&#176;', '')
+  az = cols[3].string.replace('&#176;', '')
   loc = 'alt %s, az %s' % (alt, az)
-  startStr = '%s %s %s' % (dStr, date.today().year, tStr)
-  start = datetime(*strptime(startStr, '%d %b %Y %H:%M')[0:7])
+  start = datetime(*strptime(dtStr, '%d/%m/%Y %H:%M:%S')[0:7])
   return (start, intensity, loc)
 
 
@@ -88,16 +70,16 @@ for o, a in optlist:
     sys.exit()
 
 # Heavens Above URLs and login information.
-lURL = 'http://heavens-above.com/logon.asp'                       # login
-iURL = 'http://heavens-above.com/iridium.asp?Dur=7&Session='      # iridium flares
-  
+lURL = 'http://heavens-above.com/logon.aspx'                       # login
+iURL = 'http://heavens-above.com/IridiumFlares.aspx?Session='     # iridium flares
+
 # Create virtual browser and login.
 br = mechanize.Browser()
 br.set_handle_robots(False)
 br.open(lURL)
 br.select_form(nr=0)    # the login form is the first on the page
-br['UserName'] = user['name']
-br['Password'] = user['password']
+br['ctl00$ContentPlaceHolder1$txtUsername'] = user['name']
+br['ctl00$ContentPlaceHolder1$txtPassword'] = user['password']
 resp = br.submit()
 
 # Get session ID from the end of the response URL.
@@ -106,17 +88,17 @@ sid = resp.geturl().split('=')[1]
 # Get the 7-day Iridium page.
 iHtml = br.open(iURL + sid).read()
 
- 
+
 # For some reason, Beautiful Soup can't parse the HTML on the Iridium page.
 # To get around this problem, we extract just the table of flare data and set
 # it in a well-formed HTML skeleton. If there is no table of flare data, create
 # an empty table.
 try:
-  table = iHtml.split(r'<table BORDER CELLPADDING=5>')[1]
+  table = iHtml.split(r'<table class="standardTable" cellspacing="0" cellpadding="4" rules="cols">')[1]
   table = table.split(r'</table>')[0]
 except IndexError:
   table = '<tr><td></td></tr>'
-  
+
 
 html = '''<html>
 <head>
@@ -143,5 +125,4 @@ for row in rows:
         (start.strftime('%b %d %H:%M'), intensity, loc)
     else:
       makeiCalEvent(start, loc, intensity)
-      
-    
+
