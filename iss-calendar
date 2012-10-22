@@ -46,7 +46,7 @@ def makeiCalEvent(start, end, loc1, loc2, loc3, intensity):
 end tell''' % (whichCal, asStart, asEnd, info)
 
   envoy.run('osascript', data=cmd)
-  
+
 
 # Parse a row of Heavens Above data and return the start date (datetime),
 # the intensity (integer), and the beginning, peak, and end sky positions
@@ -89,7 +89,7 @@ for o, a in optlist:
 nextWeek = date.today() + timedelta(days=7)
 
 # Heavens Above URLs and login information.
-loginURL = 'http://heavens-above.com/logon.asp'
+loginURL = 'http://heavens-above.com/logon.aspx'
 issURL = 'http://www.heavens-above.com/PassSummary.aspx?satid=25544&Session='
 
 # Create virtual browser and login.
@@ -97,8 +97,8 @@ br = mechanize.Browser()
 br.set_handle_robots(False)
 br.open(loginURL)
 br.select_form(nr=0)    # the login form is the first on the page
-br['UserName'] = user['name']
-br['Password'] = user['password']
+br['ctl00$ContentPlaceHolder1$txtUsername'] = user['name']
+br['ctl00$ContentPlaceHolder1$txtPassword'] = user['password']
 resp = br.submit()
 
 # Get session ID from the end of the response URL.
