@@ -51,7 +51,7 @@ end tell''' % (whichCal, asStart, asEnd, info)
 def parseRow(row):
   cols = row.findAll('td')
   dtStr = cols[0].a.string
-  intensity = int(cols[1].string)
+  intensity = float(cols[1].string)
   alt = cols[2].string.replace('&#176;', '')
   az = cols[3].string.replace('&#176;', '')
   loc = 'alt %s, az %s' % (alt, az)
