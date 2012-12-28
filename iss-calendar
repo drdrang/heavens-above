@@ -21,6 +21,14 @@ minAlt = 30         # show passes at least this high
 earliest = 12       # show passes after this hour of day
 whichCal = 'home'   # add events to this calendar
 
+# Since Heavens Above doesn't include the year in the ISS pass
+# dates, we have to figure it out ourselves. Easy enough most
+# of the year, a little tricky when the week spans a change of
+# year.
+thisDate = date.today()
+thisYear = thisDate.year
+thisMonth = thisDate.strftime("%b")
+
 # Get Heavens Above login credentials.
 dotfile = '.heavens-above'
 dotpath = os.environ['HOME'] + '/' + dotfile
@@ -54,6 +62,17 @@ end tell''' % (whichCal, asStart, asEnd, info)
 def parseRow(row):
   cols = row.findAll('td')
   dStr = cols[0].a.string
+  # dStr is in the form 31 Dec. To parse the date with strptime,
+  # the day must have a leading zero if it doesn't have one. Also,
+  # we need to add the year, being careful when the year changes.
+  dStrList =dStr.split()
+  if len(dStrList[0]) < 2:
+    dStrList[0] = '0' + dStrList[0]
+  if dStrList[1] == 'Jan' and thisMonth == 'Dec':
+    dStrList.append(str(thisYear+1))
+  else:
+    dStrList.append(str(thisYear))
+  dStr = ' '.join(dStrList)
   t1Str = ':'.join(cols[2].string.split(':')[0:2])
   t3Str = ':'.join(cols[8].string.split(':')[0:2])
   intensity = float(cols[1].string)
@@ -66,9 +85,9 @@ def parseRow(row):
   loc1 = '%s-%s' % (az1, alt1)
   loc2 = '%s-%s' % (az2, alt2)
   loc3 = '%s-%s' % (az3, alt3)
-  startStr = '%s %s %s' % (dStr, date.today().year, t1Str)
+  startStr = '%s %s' % (dStr, t1Str)
   start = datetime(*strptime(startStr, '%d %b %Y %H:%M')[0:7])
-  endStr = '%s %s %s' % (dStr, date.today().year, t3Str)
+  endStr = '%s %s' % (dStr, t3Str)
   end = datetime(*strptime(endStr, '%d %b %Y %H:%M')[0:7])
   return (start, end, intensity, loc1, loc2, loc3)
 
@@ -86,7 +105,7 @@ for o, a in optlist:
 # This will be run weekly. The ISS information is given for a 10-day window.
 # To avoid duplicating events, we'll filter out events more than 7 days
 # in the future.
-nextWeek = date.today() + timedelta(days=7)
+nextWeek = thisDate + timedelta(days=7)
 
 # Heavens Above URLs and login information.
 loginURL = 'http://heavens-above.com/logon.aspx'
@@ -113,7 +132,7 @@ iHtml = br.open(issURL + sid).read()
 # it in a well-formed HTML skeleton. If there is no table of ISS data, create
 # an empty table.
 try:
-    table = iHtml.split(r'<table id="ctl00_ContentPlaceHolder1_tblPasses"', 1)[1]
+    table = iHtml.split(r'<table class="standardTable"', 1)[1]
     table = table.split(r'>', 1)[1]
     table = table.split(r'</table>', 1)[0]
 except IndexError:
@@ -142,7 +161,8 @@ for row in rows:
   if intensity <= maxMag and int(loc2.split('-')[1]) >= minAlt\
       and start.date() < nextWeek and start.hour > earliest:
     if justPrint:
-      print '%s, %.1f, %s / %s / %s' %\
+      line = '%s, %.1f, %s / %s / %s' %\
         (start.strftime('%b %d %H:%M'), intensity, loc1, loc2, loc3)
+      print line
     else:
       makeiCalEvent(start, end, loc1, loc2, loc3, intensity)
